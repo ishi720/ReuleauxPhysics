@@ -236,7 +236,7 @@
         <div class="controls">
             <div class="gravity-slider">
                 <span>重力</span>
-                <input type="range" id="gravity" min="0" max="2" step="0.1" value="1">
+                <input type="range" id="gravity" min="0" max="2" step="0.1" value="0">
             </div>
             <label class="debug-toggle">
                 <input type="checkbox" id="debugMode">
@@ -270,8 +270,7 @@
 
         let width, height;
         let reuleauxTriangles = [];
-        let isPaused = false;
-        let gravity = 1;
+        let gravity = 0;
         let selectedTriangle = null;
         let dragOffset = { x: 0, y: 0 };
         let lastTime = performance.now();
@@ -903,7 +902,7 @@
         function addTriangle(x, y) {
             const triangle = new ReuleauxTriangle(
                 x || Math.random() * (width - 200) + 100,
-                y || 100
+                y || Math.random() * (height - 200) + 100,
             );
             reuleauxTriangles.push(triangle);
             updateObjectCount();
@@ -926,10 +925,8 @@
             ctx.fillStyle = 'rgba(10, 10, 15, 0.3)';
             ctx.fillRect(0, 0, width, height);
 
-            if (!isPaused) {
-                reuleauxTriangles.forEach(triangle => triangle.update(dt));
-                checkCollisions();
-            }
+            reuleauxTriangles.forEach(triangle => triangle.update(dt));
+            checkCollisions();
 
             reuleauxTriangles.forEach(triangle => triangle.draw(ctx));
 
