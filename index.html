@@ -257,7 +257,6 @@
                 <input type="checkbox" id="debugMode">
                 <span>当たり判定表示</span>
             </label>
-            <button id="addBtn">追加</button>
             <button id="clearBtn">クリア</button>
             <button id="pauseBtn">一時停止</button>
         </div>
@@ -1098,11 +1097,6 @@
 
         canvas.addEventListener('touchend', () => {
             selectedTriangle = null;
-        });
-
-        document.getElementById('addBtn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            addTriangle();
         });
 
         document.getElementById('clearBtn').addEventListener('click', (e) => {
