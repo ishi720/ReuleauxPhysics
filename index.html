@@ -699,8 +699,8 @@
                 // 消滅中は透明度を下げる
                 const alpha = this.isDisappearing ? (1 - this.disappearProgress) : 1;
 
-                // 軌跡
-                if (this.trail.length > 1 && !this.isDisappearing) {
+                // 軌跡（ドラッグ中は表示しない）
+                if (this.trail.length > 1 && !this.isDisappearing && this !== selectedTriangle) {
                     ctx.beginPath();
                     ctx.moveTo(this.trail[0].x, this.trail[0].y);
                     for (let i = 1; i < this.trail.length; i++) {
@@ -1073,6 +1073,8 @@
                     dragOffset.y = my - selectedTriangle.y;
                     selectedTriangle.vx = 0;
                     selectedTriangle.vy = 0;
+                    // ドラッグ開始時に軌跡をクリア
+                    selectedTriangle.trail = [];
                     break;
                 }
             }
@@ -1123,6 +1125,8 @@
                     dragOffset.y = my - selectedTriangle.y;
                     selectedTriangle.vx = 0;
                     selectedTriangle.vy = 0;
+                    // ドラッグ開始時に軌跡をクリア
+                    selectedTriangle.trail = [];
                     e.preventDefault();
                     break;
                 }
