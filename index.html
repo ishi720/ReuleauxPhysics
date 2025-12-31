@@ -1013,11 +1013,16 @@
         }
 
         // イベントリスナー
-        // ダブルクリック/ダブルタップで三角形を追加
+        // ダブルクリックで三角形を追加（マウスのみ）
         canvas.addEventListener('dblclick', (e) => {
+            // タッチデバイスの場合はスキップ（ダブルタップで処理するため）
+            if (isTouchDevice) return;
             const rect = canvas.getBoundingClientRect();
             addTriangle(e.clientX - rect.left, e.clientY - rect.top);
         });
+
+        // タッチデバイス判定フラグ
+        let isTouchDevice = false;
 
         // タッチデバイス用のダブルタップ検出
         let lastTapTime = 0;
@@ -1026,8 +1031,15 @@
         const doubleTapDelay = 300; // ダブルタップの間隔（ミリ秒）
         const doubleTapDistance = 30; // 同じ場所とみなす距離（ピクセル）
 
+        canvas.addEventListener('touchstart', () => {
+            isTouchDevice = true;
+        }, { passive: true });
+
         canvas.addEventListener('touchend', (e) => {
-            if (selectedTriangle) return; // ドラッグ中は無視
+            if (selectedTriangle) {
+                selectedTriangle = null;
+                return;
+            }
 
             const currentTime = new Date().getTime();
             const touch = e.changedTouches[0];
@@ -1042,6 +1054,7 @@
 
             if (timeDiff < doubleTapDelay && distDiff < doubleTapDistance) {
                 // ダブルタップ検出
+                e.preventDefault();
                 addTriangle(tapX, tapY);
                 lastTapTime = 0; // リセット
             } else {
@@ -1135,10 +1148,6 @@
                 e.preventDefault();
             }
         }, { passive: false });
-
-        canvas.addEventListener('touchend', () => {
-            selectedTriangle = null;
-        });
 
         document.getElementById('clearBtn').addEventListener('click', (e) => {
             e.stopPropagation();
