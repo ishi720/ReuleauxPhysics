@@ -55,11 +55,12 @@
             top: 0;
             left: 0;
             right: 0;
-            height: 80px;
-            padding: 20px 40px;
+            padding: 12px 20px;
             display: flex;
+            flex-wrap: wrap;
             justify-content: space-between;
             align-items: center;
+            gap: 12px;
             z-index: 100;
             background: linear-gradient(to bottom, rgba(10, 10, 15, 0.95), rgba(10, 10, 15, 0.85));
             backdrop-filter: blur(10px);
@@ -68,42 +69,27 @@
 
         h1 {
             font-family: 'Orbitron', sans-serif;
-            font-size: 1.4rem;
+            font-size: clamp(0.9rem, 3vw, 1.4rem);
             font-weight: 700;
             color: #fff;
-            letter-spacing: 0.3em;
+            letter-spacing: 0.2em;
             text-transform: uppercase;
-            display: flex;
-            align-items: center;
-            gap: 15px;
-        }
-
-        h1::before {
-            content: '';
-            width: 30px;
-            height: 30px;
-            background: linear-gradient(135deg, #7000ff, #00ffb4);
-            clip-path: polygon(50% 0%, 100% 100%, 0% 100%);
-            animation: spin 8s linear infinite;
-        }
-
-        @keyframes spin {
-            from { transform: rotate(0deg); }
-            to { transform: rotate(360deg); }
+            white-space: nowrap;
         }
 
         .controls {
             display: flex;
-            gap: 15px;
+            flex-wrap: wrap;
+            gap: 10px;
             align-items: center;
         }
 
         button {
             font-family: 'Orbitron', sans-serif;
-            font-size: 0.75rem;
+            font-size: 0.7rem;
             font-weight: 700;
-            letter-spacing: 0.15em;
-            padding: 12px 24px;
+            letter-spacing: 0.1em;
+            padding: 10px 16px;
             border: 1px solid rgba(255, 255, 255, 0.2);
             background: rgba(255, 255, 255, 0.05);
             color: #fff;
@@ -112,6 +98,7 @@
             text-transform: uppercase;
             position: relative;
             overflow: hidden;
+            white-space: nowrap;
         }
 
         button::before {
@@ -141,10 +128,10 @@
 
         #canvas-container {
             position: fixed;
-            top: 80px;
+            top: 60px;
             left: 0;
             width: 100%;
-            height: calc(100% - 80px);
+            bottom: 40px;
             z-index: 10;
         }
 
@@ -181,7 +168,7 @@
         .gravity-slider {
             display: flex;
             align-items: center;
-            gap: 12px;
+            gap: 8px;
             color: rgba(255, 255, 255, 0.6);
             font-size: 0.75rem;
             letter-spacing: 0.1em;
@@ -189,7 +176,7 @@
 
         input[type="range"] {
             -webkit-appearance: none;
-            width: 120px;
+            width: 80px;
             height: 4px;
             background: rgba(255, 255, 255, 0.1);
             border-radius: 2px;
@@ -206,29 +193,102 @@
             box-shadow: 0 0 10px rgba(0, 255, 180, 0.5);
         }
 
-        .mode-indicator {
+        footer {
             position: fixed;
-            top: 100px;
-            left: 50%;
-            transform: translateX(-50%);
+            bottom: 0;
+            left: 0;
+            right: 0;
+            height: 40px;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            background: linear-gradient(to top, rgba(10, 10, 15, 0.95), rgba(10, 10, 15, 0.85));
+            backdrop-filter: blur(10px);
+            border-top: 1px solid rgba(255, 255, 255, 0.05);
+            z-index: 100;
+        }
+
+        .mode-indicator {
             font-family: 'Orbitron', sans-serif;
-            font-size: 0.7rem;
-            letter-spacing: 0.3em;
+            font-size: 0.65rem;
+            letter-spacing: 0.2em;
             color: rgba(255, 255, 255, 0.4);
             text-transform: uppercase;
-            z-index: 100;
+            text-align: center;
+            white-space: nowrap;
         }
 
         .debug-toggle {
             display: flex;
             align-items: center;
-            gap: 8px;
+            gap: 6px;
             color: rgba(255, 255, 255, 0.6);
-            font-size: 0.75rem;
+            font-size: 0.7rem;
+            white-space: nowrap;
         }
 
         .debug-toggle input {
             accent-color: #00ffb4;
+        }
+
+        @media (max-width: 600px) {
+            header {
+                padding: 10px 12px;
+                gap: 8px;
+            }
+
+            h1 {
+                font-size: 0.85rem;
+                letter-spacing: 0.15em;
+            }
+
+            .controls {
+                gap: 8px;
+            }
+
+            button {
+                font-size: 0.6rem;
+                padding: 8px 12px;
+            }
+
+            .gravity-slider {
+                font-size: 0.65rem;
+            }
+
+            .gravity-slider span {
+                display: none;
+            }
+
+            input[type="range"] {
+                width: 60px;
+            }
+
+            .debug-toggle {
+                font-size: 0.6rem;
+            }
+
+            .debug-toggle span {
+                display: none;
+            }
+
+            .debug-toggle::after {
+                content: 'Debug';
+                font-size: 0.6rem;
+            }
+
+            footer {
+                height: 36px;
+            }
+
+            .mode-indicator {
+                font-size: 0.55rem;
+                letter-spacing: 0.1em;
+            }
+
+            #canvas-container {
+                top: 50px;
+                bottom: 36px;
+            }
         }
     </style>
 </head>
@@ -244,13 +304,15 @@
             </div>
             <label class="debug-toggle">
                 <input type="checkbox" id="debugMode">
-                <span>当たり判定表示</span>
+                <span>Debug</span>
             </label>
             <button id="clearBtn">クリア</button>
         </div>
     </header>
 
-    <div class="mode-indicator">ダブルタップで追加 / ドラッグで移動</div>
+    <footer>
+        <div class="mode-indicator">ダブルタップで追加 / ドラッグで移動</div>
+    </footer>
 
     <div id="canvas-container">
         <canvas id="canvas"></canvas>
