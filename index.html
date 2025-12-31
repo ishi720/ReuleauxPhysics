@@ -165,34 +165,6 @@
             min-width: 60px;
         }
 
-        .gravity-slider {
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 0.75rem;
-            letter-spacing: 0.1em;
-        }
-
-        input[type="range"] {
-            -webkit-appearance: none;
-            width: 80px;
-            height: 4px;
-            background: rgba(255, 255, 255, 0.1);
-            border-radius: 2px;
-            outline: none;
-        }
-
-        input[type="range"]::-webkit-slider-thumb {
-            -webkit-appearance: none;
-            width: 16px;
-            height: 16px;
-            background: linear-gradient(135deg, #7000ff, #00ffb4);
-            border-radius: 50%;
-            cursor: pointer;
-            box-shadow: 0 0 10px rgba(0, 255, 180, 0.5);
-        }
-
         footer {
             position: fixed;
             bottom: 0;
@@ -225,6 +197,7 @@
             color: rgba(255, 255, 255, 0.6);
             font-size: 0.7rem;
             white-space: nowrap;
+            display: none;
         }
 
         .debug-toggle input {
@@ -249,18 +222,6 @@
             button {
                 font-size: 0.6rem;
                 padding: 8px 12px;
-            }
-
-            .gravity-slider {
-                font-size: 0.65rem;
-            }
-
-            .gravity-slider span {
-                display: none;
-            }
-
-            input[type="range"] {
-                width: 60px;
             }
 
             .debug-toggle {
@@ -298,10 +259,7 @@
     <header>
         <h1>Reuleaux Physics</h1>
         <div class="controls">
-            <div class="gravity-slider">
-                <span>重力</span>
-                <input type="range" id="gravity" min="0" max="2" step="0.1" value="0">
-            </div>
+            <button id="gravityBtn">重力 OFF</button>
             <label class="debug-toggle">
                 <input type="checkbox" id="debugMode">
                 <span>Debug</span>
@@ -1197,8 +1155,11 @@
             });
         });
 
-        document.getElementById('gravity').addEventListener('input', (e) => {
-            gravity = parseFloat(e.target.value);
+        document.getElementById('gravityBtn').addEventListener('click', (e) => {
+            e.stopPropagation();
+            gravity = gravity === 0 ? 1 : 0;
+            e.target.textContent = gravity === 0 ? '重力 OFF' : '重力 ON';
+            e.target.classList.toggle('active', gravity === 1);
         });
 
         document.getElementById('debugMode').addEventListener('change', (e) => {
