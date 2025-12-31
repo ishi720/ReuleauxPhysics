@@ -149,21 +149,6 @@
             display: block;
         }
 
-        .info-panel {
-            position: fixed;
-            bottom: 30px;
-            left: 40px;
-            z-index: 100;
-            color: rgba(255, 255, 255, 0.6);
-            font-size: 0.85rem;
-            line-height: 1.8;
-        }
-
-        .info-panel strong {
-            color: #00ffb4;
-            font-weight: 500;
-        }
-
         .stats-panel {
             position: fixed;
             bottom: 30px;
@@ -258,7 +243,6 @@
                 <span>当たり判定表示</span>
             </label>
             <button id="clearBtn">クリア</button>
-            <button id="pauseBtn">一時停止</button>
         </div>
     </header>
 
@@ -266,12 +250,6 @@
 
     <div id="canvas-container">
         <canvas id="canvas"></canvas>
-    </div>
-
-    <div class="info-panel">
-        <div><strong>ルーローの三角形</strong> - 定幅曲線</div>
-        <div>どの方向でも同じ幅を持つ図形</div>
-        <div>正確な形状で衝突判定</div>
     </div>
 
     <div class="stats-panel">
@@ -1103,13 +1081,6 @@
             e.stopPropagation();
             reuleauxTriangles = [];
             updateObjectCount();
-        });
-
-        document.getElementById('pauseBtn').addEventListener('click', (e) => {
-            e.stopPropagation();
-            isPaused = !isPaused;
-            e.target.textContent = isPaused ? '再開' : '一時停止';
-            e.target.classList.toggle('active', isPaused);
         });
 
         document.getElementById('gravity').addEventListener('input', (e) => {
