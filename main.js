@@ -1,0 +1,883 @@
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const container = document.getElementById('canvas-container');
+
+let width, height;
+let reuleauxTriangles = [];
+let gravity = 0;
+let selectedTriangle = null;
+let dragOffset = { x: 0, y: 0 };
+let lastTime = performance.now();
+let frameCount = 0;
+let fps = 60;
+let debugMode = false;
+
+function resize() {
+    width = container.clientWidth;
+    height = container.clientHeight;
+    canvas.width = width;
+    canvas.height = height;
+}
+
+resize();
+window.addEventListener('resize', resize);
+
+// ルーローの三角形のジオメトリユーティリティ
+const ReuleauxGeometry = {
+    // ルーローの三角形の境界点を取得
+    getPoints(centerX, centerY, size, rotation, segments = 36) {
+        const points = [];
+        const vertices = [];
+
+        // 3つの頂点を計算
+        for (let i = 0; i < 3; i++) {
+            const angle = rotation + (i * Math.PI * 2) / 3 - Math.PI / 2;
+            vertices.push({
+                x: centerX + size * Math.cos(angle),
+                y: centerY + size * Math.sin(angle)
+            });
+        }
+
+        // 各円弧を描画
+        const arcRadius = size * Math.sqrt(3);
+
+        for (let i = 0; i < 3; i++) {
+            const center = vertices[i];
+            const startVertex = vertices[(i + 1) % 3];
+            const endVertex = vertices[(i + 2) % 3];
+
+            const startAngle = Math.atan2(startVertex.y - center.y, startVertex.x - center.x);
+            const endAngle = Math.atan2(endVertex.y - center.y, endVertex.x - center.x);
+
+            let angleDiff = endAngle - startAngle;
+            if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+            if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+            const segmentsPerArc = Math.floor(segments / 3);
+            for (let j = 0; j <= segmentsPerArc; j++) {
+                const t = j / segmentsPerArc;
+                const angle = startAngle + angleDiff * t;
+                points.push({
+                    x: center.x + arcRadius * Math.cos(angle),
+                    y: center.y + arcRadius * Math.sin(angle)
+                });
+            }
+        }
+
+        return points;
+    },
+
+    // 点がルーローの三角形の内部にあるかチェック
+    containsPoint(centerX, centerY, size, rotation, px, py) {
+        const vertices = [];
+        for (let i = 0; i < 3; i++) {
+            const angle = rotation + (i * Math.PI * 2) / 3 - Math.PI / 2;
+            vertices.push({
+                x: centerX + size * Math.cos(angle),
+                y: centerY + size * Math.sin(angle)
+            });
+        }
+
+        const arcRadius = size * Math.sqrt(3);
+
+        // 全ての円弧の内側にあるかチェック
+        for (let i = 0; i < 3; i++) {
+            const center = vertices[i];
+            const dx = px - center.x;
+            const dy = py - center.y;
+            const dist = Math.sqrt(dx * dx + dy * dy);
+
+            if (dist > arcRadius) {
+                return false;
+            }
+        }
+
+        return true;
+    },
+
+    // ルーローの三角形の境界上の最近接点を取得
+    closestPointOnBoundary(centerX, centerY, size, rotation, px, py) {
+        const vertices = [];
+        for (let i = 0; i < 3; i++) {
+            const angle = rotation + (i * Math.PI * 2) / 3 - Math.PI / 2;
+            vertices.push({
+                x: centerX + size * Math.cos(angle),
+                y: centerY + size * Math.sin(angle)
+            });
+        }
+
+        const arcRadius = size * Math.sqrt(3);
+        let closestPoint = { x: centerX, y: centerY - arcRadius, arcIndex: 0 }; // デフォルト値
+        let minDist = Infinity;
+
+        for (let i = 0; i < 3; i++) {
+            const center = vertices[i];
+            const startVertex = vertices[(i + 1) % 3];
+            const endVertex = vertices[(i + 2) % 3];
+
+            const startAngle = Math.atan2(startVertex.y - center.y, startVertex.x - center.x);
+            const endAngle = Math.atan2(endVertex.y - center.y, endVertex.x - center.x);
+
+            // 点から円弧中心への角度
+            const pointAngle = Math.atan2(py - center.y, px - center.x);
+
+            // 角度が円弧の範囲内かチェック
+            let inArc = false;
+            let angleDiff = endAngle - startAngle;
+            if (angleDiff > Math.PI) angleDiff -= Math.PI * 2;
+            if (angleDiff < -Math.PI) angleDiff += Math.PI * 2;
+
+            let testAngle = pointAngle - startAngle;
+            if (testAngle > Math.PI) testAngle -= Math.PI * 2;
+            if (testAngle < -Math.PI) testAngle += Math.PI * 2;
+
+            if ((angleDiff > 0 && testAngle >= 0 && testAngle <= angleDiff) ||
+                (angleDiff < 0 && testAngle <= 0 && testAngle >= angleDiff)) {
+                inArc = true;
+            }
+
+            let candidate;
+            if (inArc) {
+                // 円弧上の最近接点
+                candidate = {
+                    x: center.x + arcRadius * Math.cos(pointAngle),
+                    y: center.y + arcRadius * Math.sin(pointAngle),
+                    arcIndex: i
+                };
+            } else {
+                // 端点のどちらかが最近接
+                const distToStart = Math.hypot(px - startVertex.x, py - startVertex.y);
+                const distToEnd = Math.hypot(px - endVertex.x, py - endVertex.y);
+                candidate = distToStart < distToEnd ?
+                    { x: startVertex.x, y: startVertex.y, arcIndex: i } :
+                    { x: endVertex.x, y: endVertex.y, arcIndex: i };
+            }
+
+            const dist = Math.hypot(px - candidate.x, py - candidate.y);
+            if (dist < minDist) {
+                minDist = dist;
+                closestPoint = candidate;
+            }
+        }
+
+        return { point: closestPoint, distance: minDist };
+    },
+
+    // 定幅（ルーローの三角形の幅）
+    getWidth(size) {
+        return size * Math.sqrt(3);
+    }
+};
+
+class ReuleauxTriangle {
+    constructor(x, y, size) {
+        this.x = x;
+        this.y = y;
+        this.size = size || 40 + Math.random() * 30;
+        this.originalSize = this.size; // 元のサイズを保存
+        this.rotation = Math.random() * Math.PI * 2;
+        this.vx = (Math.random() - 0.5) * 5;
+        this.vy = (Math.random() - 0.5) * 2;
+        this.angularVelocity = (Math.random() - 0.5) * 0.1;
+        this.color = this.generateColor();
+        this.trail = [];
+        this.id = Math.random();
+
+        // 消滅アニメーション用
+        this.isDisappearing = false;
+        this.disappearProgress = 0;
+        this.disappearSpeed = 0.05 + Math.random() * 0.03; // 少しランダム性を持たせる
+
+        // 物理パラメータ
+        this.mass = this.size * this.size * 0.01; // 質量（サイズに比例）
+        // 慣性モーメント（円盤として近似: I = 0.5 * m * r^2）
+        this.inertia = 0.5 * this.mass * this.size * this.size;
+        this.invMass = 1 / this.mass;
+        this.invInertia = 1 / this.inertia;
+    }
+
+    generateColor() {
+        const colors = [
+            'rgba(112, 0, 255, 1)',
+            'rgba(0, 255, 180, 1)',
+            'rgba(255, 50, 100, 1)',
+            'rgba(255, 200, 50, 1)',
+            'rgba(50, 150, 255, 1)',
+            'rgba(255, 100, 200, 1)'
+        ];
+        return colors[Math.floor(Math.random() * colors.length)];
+    }
+
+    getWidth() {
+        return ReuleauxGeometry.getWidth(this.size);
+    }
+
+    getPoints(segments = 36) {
+        return ReuleauxGeometry.getPoints(this.x, this.y, this.size, this.rotation, segments);
+    }
+
+    containsPoint(px, py) {
+        return ReuleauxGeometry.containsPoint(this.x, this.y, this.size, this.rotation, px, py);
+    }
+
+    closestPointOnBoundary(px, py) {
+        return ReuleauxGeometry.closestPointOnBoundary(this.x, this.y, this.size, this.rotation, px, py);
+    }
+
+    // 壁との衝突で最も深い貫通点を見つける
+    findDeepestWallPenetration() {
+        const points = this.getPoints(24);
+        let deepest = null;
+        let maxDepth = 0;
+
+        const floorY = height - 10;
+
+        for (const p of points) {
+            // 床
+            if (p.y > floorY) {
+                const depth = p.y - floorY;
+                if (depth > maxDepth) {
+                    maxDepth = depth;
+                    deepest = { point: p, normal: { x: 0, y: -1 }, depth, type: 'floor' };
+                }
+            }
+            // 左壁
+            if (p.x < 0) {
+                const depth = -p.x;
+                if (depth > maxDepth) {
+                    maxDepth = depth;
+                    deepest = { point: p, normal: { x: 1, y: 0 }, depth, type: 'left' };
+                }
+            }
+            // 右壁
+            if (p.x > width) {
+                const depth = p.x - width;
+                if (depth > maxDepth) {
+                    maxDepth = depth;
+                    deepest = { point: p, normal: { x: -1, y: 0 }, depth, type: 'right' };
+                }
+            }
+            // 天井
+            if (p.y < 0) {
+                const depth = -p.y;
+                if (depth > maxDepth) {
+                    maxDepth = depth;
+                    deepest = { point: p, normal: { x: 0, y: 1 }, depth, type: 'ceiling' };
+                }
+            }
+        }
+
+        return deepest;
+    }
+
+    update(dt) {
+        // 消滅アニメーション中
+        if (this.isDisappearing) {
+            this.disappearProgress += this.disappearSpeed;
+            // イージング（ease-out）を適用
+            const eased = 1 - Math.pow(1 - this.disappearProgress, 3);
+            this.size = this.originalSize * (1 - eased);
+            // 回転を加速
+            this.angularVelocity += 0.02;
+            this.rotation += this.angularVelocity * dt;
+
+            // 物理パラメータも更新
+            this.mass = Math.max(0.01, this.size * this.size * 0.01);
+            this.inertia = Math.max(0.01, 0.5 * this.mass * this.size * this.size);
+            this.invMass = 1 / this.mass;
+            this.invInertia = 1 / this.inertia;
+
+            return this.disappearProgress < 1;
+        }
+
+        if (this === selectedTriangle) return true;
+
+        // NaN防止
+        if (isNaN(this.x) || isNaN(this.y)) {
+            this.x = width / 2;
+            this.y = height / 2;
+            this.vx = 0;
+            this.vy = 0;
+        }
+        if (isNaN(this.vx)) this.vx = 0;
+        if (isNaN(this.vy)) this.vy = 0;
+        if (isNaN(this.angularVelocity)) this.angularVelocity = 0;
+        if (isNaN(this.rotation)) this.rotation = 0;
+
+        // 重力
+        this.vy += gravity * 0.5 * dt;
+
+        // 位置更新
+        this.x += this.vx * dt;
+        this.y += this.vy * dt;
+        this.rotation += this.angularVelocity * dt;
+
+        // 壁との衝突処理
+        let collision;
+        let iterations = 0;
+        while ((collision = this.findDeepestWallPenetration()) && iterations < 5) {
+            iterations++;
+
+            // 位置補正
+            this.x += collision.normal.x * collision.depth;
+            this.y += collision.normal.y * collision.depth;
+
+            // 接触点から重心へのベクトル
+            const rx = collision.point.x - this.x;
+            const ry = collision.point.y - this.y;
+
+            // 接触点での速度 = 並進速度 + 回転による速度
+            // v_contact = v_center + ω × r
+            const contactVx = this.vx - this.angularVelocity * ry;
+            const contactVy = this.vy + this.angularVelocity * rx;
+
+            // 法線方向の接触点速度
+            const vn = contactVx * collision.normal.x + contactVy * collision.normal.y;
+
+            // 壁に向かっている場合のみ処理
+            if (vn < 0) {
+                const restitution = 0.4;
+                const friction = 0.3;
+
+                // r × n (スカラー、2Dなのでz成分のみ)
+                const rCrossN = rx * collision.normal.y - ry * collision.normal.x;
+
+                // 有効質量の逆数
+                const invMassEff = this.invMass + this.invInertia * rCrossN * rCrossN;
+
+                // 法線方向のインパルス
+                const jn = -(1 + restitution) * vn / invMassEff;
+
+                // 接線方向
+                const tx = -collision.normal.y;
+                const ty = collision.normal.x;
+                const vt = contactVx * tx + contactVy * ty;
+
+                // 接線方向のインパルス（摩擦）
+                const rCrossT = rx * ty - ry * tx;
+                const invMassEffT = this.invMass + this.invInertia * rCrossT * rCrossT;
+                let jt = -vt / invMassEffT;
+
+                // クーロン摩擦の制限
+                const maxFriction = friction * Math.abs(jn);
+                jt = Math.max(-maxFriction, Math.min(maxFriction, jt));
+
+                // 速度更新
+                this.vx += (jn * collision.normal.x + jt * tx) * this.invMass;
+                this.vy += (jn * collision.normal.y + jt * ty) * this.invMass;
+
+                // 角速度更新: Δω = r × J / I
+                const torque = rx * (jn * collision.normal.y + jt * ty) -
+                                ry * (jn * collision.normal.x + jt * tx);
+                this.angularVelocity += torque * this.invInertia;
+            }
+        }
+
+        // 速度の上限
+        const maxSpeed = 25;
+        const speed = Math.sqrt(this.vx * this.vx + this.vy * this.vy);
+        if (speed > maxSpeed) {
+            this.vx = (this.vx / speed) * maxSpeed;
+            this.vy = (this.vy / speed) * maxSpeed;
+        }
+
+        // 角速度の上限
+        const maxAngular = 0.5;
+        this.angularVelocity = Math.max(-maxAngular, Math.min(maxAngular, this.angularVelocity));
+
+        // 減衰（空気抵抗など）
+        this.vx *= 0.998;
+        this.vy *= 0.998;
+        this.angularVelocity *= 0.995;
+
+        // 軌跡
+        this.trail.unshift({ x: this.x, y: this.y });
+        if (this.trail.length > 20) this.trail.pop();
+
+        return true;
+    }
+
+    draw(ctx) {
+        // NaN防止チェック
+        if (isNaN(this.x) || isNaN(this.y) || isNaN(this.size) || isNaN(this.rotation)) {
+            return;
+        }
+
+        // サイズが小さすぎたら描画しない
+        if (this.size < 1) return;
+
+        // 消滅中は透明度を下げる
+        const alpha = this.isDisappearing ? (1 - this.disappearProgress) : 1;
+
+        // 軌跡（ドラッグ中は表示しない）
+        if (this.trail.length > 1 && !this.isDisappearing && this !== selectedTriangle) {
+            ctx.beginPath();
+            ctx.moveTo(this.trail[0].x, this.trail[0].y);
+            for (let i = 1; i < this.trail.length; i++) {
+                ctx.lineTo(this.trail[i].x, this.trail[i].y);
+            }
+            ctx.strokeStyle = this.color.replace('1)', '0.2)');
+            ctx.lineWidth = 2;
+            ctx.stroke();
+        }
+
+        const points = this.getPoints();
+
+        // グロー効果
+        ctx.shadowColor = this.color;
+        ctx.shadowBlur = 30 * alpha;
+
+        // 形状を描画
+        ctx.beginPath();
+        ctx.moveTo(points[0].x, points[0].y);
+        for (let i = 1; i < points.length; i++) {
+            ctx.lineTo(points[i].x, points[i].y);
+        }
+        ctx.closePath();
+
+        // グラデーション塗りつぶし
+        const gradient = ctx.createRadialGradient(
+            this.x, this.y, 0,
+            this.x, this.y, this.size * 1.5
+        );
+        gradient.addColorStop(0, this.color.replace('1)', `${0.8 * alpha})`));
+        gradient.addColorStop(0.5, this.color.replace('1)', `${0.4 * alpha})`));
+        gradient.addColorStop(1, this.color.replace('1)', `${0.1 * alpha})`));
+
+        ctx.fillStyle = gradient;
+        ctx.fill();
+
+        ctx.strokeStyle = this.color.replace('1)', `${alpha})`);
+        ctx.lineWidth = 2;
+        ctx.stroke();
+
+        ctx.shadowBlur = 0;
+
+        // 中心点
+        ctx.beginPath();
+        ctx.arc(this.x, this.y, 3 * (this.size / this.originalSize), 0, Math.PI * 2);
+        ctx.fillStyle = `rgba(255, 255, 255, ${alpha})`;
+        ctx.fill();
+
+        // 回転インジケーター
+        const lineLength = this.size * 0.6;
+        ctx.beginPath();
+        ctx.moveTo(this.x, this.y);
+        ctx.lineTo(
+            this.x + Math.cos(this.rotation - Math.PI / 2) * lineLength,
+            this.y + Math.sin(this.rotation - Math.PI / 2) * lineLength
+        );
+        ctx.strokeStyle = `rgba(255, 255, 255, ${0.5 * alpha})`;
+        ctx.lineWidth = 1;
+        ctx.stroke();
+
+        // デバッグモード：当たり判定の点を表示
+        if (debugMode && !this.isDisappearing) {
+            const collisionPoints = this.getPoints(24);
+            for (const p of collisionPoints) {
+                ctx.beginPath();
+                ctx.arc(p.x, p.y, 3, 0, Math.PI * 2);
+                ctx.fillStyle = 'rgba(255, 255, 0, 0.8)';
+                ctx.fill();
+            }
+        }
+    }
+}
+
+// 2つのルーローの三角形の衝突検出
+function checkReuleauxCollision(a, b) {
+    // 消滅中のオブジェクトは衝突判定しない
+    if (a.isDisappearing || b.isDisappearing) return null;
+
+    // 中心間距離で大まかにチェック
+    const dx = b.x - a.x;
+    const dy = b.y - a.y;
+    const centerDist = Math.sqrt(dx * dx + dy * dy);
+    const maxDist = (a.getWidth() + b.getWidth()) * 0.55;
+
+    if (centerDist > maxDist) return null;
+
+    // AとBの最近接点を求める（GJK的なアプローチの簡易版）
+    // Bの中心に最も近いA上の点
+    const closestOnA = a.closestPointOnBoundary(b.x, b.y);
+    // Aの中心に最も近いB上の点
+    const closestOnB = b.closestPointOnBoundary(a.x, a.y);
+
+    if (!closestOnA || !closestOnA.point || !closestOnB || !closestOnB.point) return null;
+
+    // A上の点がBの内部にあるか
+    const aInB = b.containsPoint(closestOnA.point.x, closestOnA.point.y);
+    // B上の点がAの内部にあるか
+    const bInA = a.containsPoint(closestOnB.point.x, closestOnB.point.y);
+
+    if (!aInB && !bInA) return null; // 衝突なし
+
+    // 衝突している場合、法線はAからBへの方向（BをAから押し出す方向）
+    let normal, depth, contactPoint;
+
+    if (centerDist > 0.001) {
+        // 法線は中心間ベクトル（AからBへ）
+        normal = { x: dx / centerDist, y: dy / centerDist };
+    } else {
+        // 中心が完全に重なっている場合
+        normal = { x: 1, y: 0 };
+    }
+
+    // 貫通深度を計算
+    // A上でB方向に最も出ている点を探す
+    const pointsA = a.getPoints(12);
+    const pointsB = b.getPoints(12);
+
+    let maxProjA = -Infinity;
+    let minProjB = Infinity;
+
+    for (const p of pointsA) {
+        const proj = (p.x - a.x) * normal.x + (p.y - a.y) * normal.y;
+        if (proj > maxProjA) maxProjA = proj;
+    }
+
+    for (const p of pointsB) {
+        const proj = (p.x - a.x) * normal.x + (p.y - a.y) * normal.y;
+        if (proj < minProjB) minProjB = proj;
+    }
+
+    depth = maxProjA - minProjB;
+
+    if (depth < 0.1) return null; // 実際には衝突していない
+
+    // 接触点は両形状の境界の中間
+    contactPoint = {
+        x: (closestOnA.point.x + closestOnB.point.x) * 0.5,
+        y: (closestOnA.point.y + closestOnB.point.y) * 0.5
+    };
+
+    return { normal, depth, point: contactPoint };
+}
+
+function resolveCollision(a, b, collision) {
+    if (!collision || !collision.point || !collision.normal) return;
+
+    const { normal, depth, point } = collision;
+
+    if (isNaN(normal.x) || isNaN(normal.y) || isNaN(depth) || depth < 0.1) return;
+
+    const invMassA = a === selectedTriangle ? 0 : a.invMass;
+    const invMassB = b === selectedTriangle ? 0 : b.invMass;
+    const invInertiaA = a === selectedTriangle ? 0 : a.invInertia;
+    const invInertiaB = b === selectedTriangle ? 0 : b.invInertia;
+    const totalInvMass = invMassA + invMassB;
+
+    if (totalInvMass === 0) return;
+
+    // 1. 位置補正（オブジェクトを分離）
+    const percent = 0.8;
+    const slop = 0.5;
+    const correction = Math.max(depth - slop, 0) * percent / totalInvMass;
+
+    if (a !== selectedTriangle) {
+        a.x -= correction * invMassA * normal.x;
+        a.y -= correction * invMassA * normal.y;
+    }
+    if (b !== selectedTriangle) {
+        b.x += correction * invMassB * normal.x;
+        b.y += correction * invMassB * normal.y;
+    }
+
+    // 2. 速度のインパルス応答
+    // 接触点から重心へのベクトル
+    const raX = point.x - a.x;
+    const raY = point.y - a.y;
+    const rbX = point.x - b.x;
+    const rbY = point.y - b.y;
+
+    // 接触点での速度
+    const vaX = a.vx - a.angularVelocity * raY;
+    const vaY = a.vy + a.angularVelocity * raX;
+    const vbX = b.vx - b.angularVelocity * rbY;
+    const vbY = b.vy + b.angularVelocity * rbX;
+
+    // 相対速度（BのAに対する速度）
+    const relVx = vbX - vaX;
+    const relVy = vbY - vaY;
+    const relVn = relVx * normal.x + relVy * normal.y;
+
+    // 既に離れる方向に動いているなら何もしない
+    if (relVn > 0) return;
+
+    // 有効質量
+    const raCrossN = raX * normal.y - raY * normal.x;
+    const rbCrossN = rbX * normal.y - rbY * normal.x;
+    const invMassEff = invMassA + invMassB +
+                        invInertiaA * raCrossN * raCrossN +
+                        invInertiaB * rbCrossN * rbCrossN;
+
+    if (invMassEff < 0.0001) return;
+
+    // 法線インパルス
+    const e = 0.3; // 反発係数
+    const jn = -(1 + e) * relVn / invMassEff;
+
+    // 摩擦インパルス
+    const tx = -normal.y;
+    const ty = normal.x;
+    const relVt = relVx * tx + relVy * ty;
+
+    const raCrossT = raX * ty - raY * tx;
+    const rbCrossT = rbX * ty - rbY * tx;
+    const invMassEffT = invMassA + invMassB +
+                        invInertiaA * raCrossT * raCrossT +
+                        invInertiaB * rbCrossT * rbCrossT;
+
+    let jt = 0;
+    if (invMassEffT > 0.0001 && Math.abs(relVt) > 0.001) {
+        jt = -relVt / invMassEffT;
+        const mu = 0.3;
+        const maxJt = mu * Math.abs(jn);
+        jt = Math.max(-maxJt, Math.min(maxJt, jt));
+    }
+
+    // インパルス適用
+    const jx = jn * normal.x + jt * tx;
+    const jy = jn * normal.y + jt * ty;
+
+    if (a !== selectedTriangle) {
+        a.vx -= jx * invMassA;
+        a.vy -= jy * invMassA;
+        a.angularVelocity -= (raX * jy - raY * jx) * invInertiaA;
+    }
+    if (b !== selectedTriangle) {
+        b.vx += jx * invMassB;
+        b.vy += jy * invMassB;
+        b.angularVelocity += (rbX * jy - rbY * jx) * invInertiaB;
+    }
+}
+
+function checkCollisions() {
+    // 位置補正のためのイテレーション
+    for (let iter = 0; iter < 4; iter++) {
+        for (let i = 0; i < reuleauxTriangles.length; i++) {
+            for (let j = i + 1; j < reuleauxTriangles.length; j++) {
+                const a = reuleauxTriangles[i];
+                const b = reuleauxTriangles[j];
+
+                const collision = checkReuleauxCollision(a, b);
+                if (collision) {
+                    resolveCollision(a, b, collision);
+                }
+            }
+        }
+    }
+}
+
+function addTriangle(x, y) {
+    const triangle = new ReuleauxTriangle(
+        x || Math.random() * (width - 200) + 100,
+        y || Math.random() * (height - 200) + 100,
+    );
+    reuleauxTriangles.push(triangle);
+    updateObjectCount();
+}
+
+function updateObjectCount() {
+    document.getElementById('objectCount').textContent = reuleauxTriangles.length;
+}
+
+function animate(currentTime) {
+    const dt = Math.min((currentTime - lastTime) / 16.67, 3);
+    lastTime = currentTime;
+
+    frameCount++;
+    if (frameCount % 30 === 0) {
+        fps = Math.round(1000 / ((currentTime - lastTime) + 0.001));
+        document.getElementById('fps').textContent = Math.min(fps, 60);
+    }
+
+    ctx.fillStyle = 'rgba(10, 10, 15, 0.3)';
+    ctx.fillRect(0, 0, width, height);
+
+    // 更新して、消滅が完了したものを削除
+    reuleauxTriangles = reuleauxTriangles.filter(triangle => triangle.update(dt));
+    updateObjectCount();
+
+    checkCollisions();
+
+    reuleauxTriangles.forEach(triangle => triangle.draw(ctx));
+
+    // 床のライン
+    ctx.strokeStyle = 'rgba(255, 255, 255, 0.1)';
+    ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(0, height - 10);
+    ctx.lineTo(width, height - 10);
+    ctx.stroke();
+
+    requestAnimationFrame(animate);
+}
+
+// 初期オブジェクト
+for (let i = 0; i < 5; i++) {
+    setTimeout(() => addTriangle(), i * 200);
+}
+
+// イベントリスナー
+// ダブルクリックで三角形を追加（マウスのみ）
+canvas.addEventListener('dblclick', (e) => {
+    // タッチデバイスの場合はスキップ（ダブルタップで処理するため）
+    if (isTouchDevice) return;
+    const rect = canvas.getBoundingClientRect();
+    addTriangle(e.clientX - rect.left, e.clientY - rect.top);
+});
+
+// タッチデバイス判定フラグ
+let isTouchDevice = false;
+
+// タッチデバイス用のダブルタップ検出
+let lastTapTime = 0;
+let lastTapX = 0;
+let lastTapY = 0;
+const doubleTapDelay = 300; // ダブルタップの間隔（ミリ秒）
+const doubleTapDistance = 30; // 同じ場所とみなす距離（ピクセル）
+
+canvas.addEventListener('touchstart', () => {
+    isTouchDevice = true;
+}, { passive: true });
+
+canvas.addEventListener('touchend', (e) => {
+    if (selectedTriangle) {
+        selectedTriangle = null;
+        return;
+    }
+
+    const currentTime = new Date().getTime();
+    const touch = e.changedTouches[0];
+    const rect = canvas.getBoundingClientRect();
+    const tapX = touch.clientX - rect.left;
+    const tapY = touch.clientY - rect.top;
+
+    const timeDiff = currentTime - lastTapTime;
+    const distDiff = Math.sqrt(
+        Math.pow(tapX - lastTapX, 2) + Math.pow(tapY - lastTapY, 2)
+    );
+
+    if (timeDiff < doubleTapDelay && distDiff < doubleTapDistance) {
+        // ダブルタップ検出
+        e.preventDefault();
+        addTriangle(tapX, tapY);
+        lastTapTime = 0; // リセット
+    } else {
+        lastTapTime = currentTime;
+        lastTapX = tapX;
+        lastTapY = tapY;
+    }
+});
+
+canvas.addEventListener('mousedown', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    for (let i = reuleauxTriangles.length - 1; i >= 0; i--) {
+        if (reuleauxTriangles[i].containsPoint(mx, my)) {
+            selectedTriangle = reuleauxTriangles[i];
+            dragOffset.x = mx - selectedTriangle.x;
+            dragOffset.y = my - selectedTriangle.y;
+            selectedTriangle.vx = 0;
+            selectedTriangle.vy = 0;
+            // ドラッグ開始時に軌跡をクリア
+            selectedTriangle.trail = [];
+            break;
+        }
+    }
+});
+
+canvas.addEventListener('mousemove', (e) => {
+    const rect = canvas.getBoundingClientRect();
+    const mx = e.clientX - rect.left;
+    const my = e.clientY - rect.top;
+
+    if (selectedTriangle) {
+        const newX = mx - dragOffset.x;
+        const newY = my - dragOffset.y;
+        selectedTriangle.vx = (newX - selectedTriangle.x) * 0.5;
+        selectedTriangle.vy = (newY - selectedTriangle.y) * 0.5;
+        selectedTriangle.x = newX;
+        selectedTriangle.y = newY;
+    }
+
+    canvas.style.cursor = 'default';
+    for (const triangle of reuleauxTriangles) {
+        if (triangle.containsPoint(mx, my)) {
+            canvas.style.cursor = 'grab';
+            break;
+        }
+    }
+});
+
+canvas.addEventListener('mouseup', () => {
+    selectedTriangle = null;
+});
+
+canvas.addEventListener('mouseleave', () => {
+    selectedTriangle = null;
+});
+
+// タッチイベント（ドラッグ用）
+canvas.addEventListener('touchstart', (e) => {
+    const touch = e.touches[0];
+    const rect = canvas.getBoundingClientRect();
+    const mx = touch.clientX - rect.left;
+    const my = touch.clientY - rect.top;
+
+    for (let i = reuleauxTriangles.length - 1; i >= 0; i--) {
+        if (reuleauxTriangles[i].containsPoint(mx, my)) {
+            selectedTriangle = reuleauxTriangles[i];
+            dragOffset.x = mx - selectedTriangle.x;
+            dragOffset.y = my - selectedTriangle.y;
+            selectedTriangle.vx = 0;
+            selectedTriangle.vy = 0;
+            // ドラッグ開始時に軌跡をクリア
+            selectedTriangle.trail = [];
+            e.preventDefault();
+            break;
+        }
+    }
+}, { passive: false });
+
+canvas.addEventListener('touchmove', (e) => {
+    if (selectedTriangle) {
+        const touch = e.touches[0];
+        const rect = canvas.getBoundingClientRect();
+        const mx = touch.clientX - rect.left;
+        const my = touch.clientY - rect.top;
+
+        const newX = mx - dragOffset.x;
+        const newY = my - dragOffset.y;
+        selectedTriangle.vx = (newX - selectedTriangle.x) * 0.5;
+        selectedTriangle.vy = (newY - selectedTriangle.y) * 0.5;
+        selectedTriangle.x = newX;
+        selectedTriangle.y = newY;
+        e.preventDefault();
+    }
+}, { passive: false });
+
+document.getElementById('clearBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    // 各三角形に消滅アニメーションを開始
+    reuleauxTriangles.forEach(triangle => {
+        triangle.isDisappearing = true;
+        triangle.disappearProgress = 0;
+    });
+});
+
+document.getElementById('gravityBtn').addEventListener('click', (e) => {
+    e.stopPropagation();
+    gravity = gravity === 0 ? 1 : 0;
+    e.target.textContent = gravity === 0 ? '重力 OFF' : '重力 ON';
+    e.target.classList.toggle('active', gravity === 1);
+});
+
+document.getElementById('debugMode').addEventListener('change', (e) => {
+    debugMode = e.target.checked;
+});
+
+animate(performance.now());
