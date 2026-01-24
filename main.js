@@ -12,6 +12,10 @@ let frameCount = 0;
 let fps = 60;
 let debugMode = false;
 
+/**
+ * キャンバスのサイズをコンテナに合わせてリサイズする
+ * @returns {void}
+ */
 function resize() {
     width = container.clientWidth;
     height = container.clientHeight;
@@ -22,9 +26,20 @@ function resize() {
 resize();
 window.addEventListener('resize', resize);
 
-// ルーローの三角形のジオメトリユーティリティ
+/**
+ * ルーローの三角形のジオメトリユーティリティ
+ * @namespace
+ */
 const ReuleauxGeometry = {
-    // ルーローの三角形の境界点を取得
+    /**
+     * ルーローの三角形の境界点を取得
+     * @param {number} centerX - 中心のX座標
+     * @param {number} centerY - 中心のY座標
+     * @param {number} size - 三角形のサイズ（頂点から中心までの距離）
+     * @param {number} rotation - 回転角度（ラジアン）
+     * @param {number} [segments=36] - 境界を構成する点の数
+     * @returns {{x: number, y: number}[]} 境界点の配列
+     */
     getPoints(centerX, centerY, size, rotation, segments = 36) {
         const points = [];
         const vertices = [];
@@ -67,7 +82,16 @@ const ReuleauxGeometry = {
         return points;
     },
 
-    // 点がルーローの三角形の内部にあるかチェック
+    /**
+     * 点がルーローの三角形の内部にあるかチェック
+     * @param {number} centerX - 三角形の中心X座標
+     * @param {number} centerY - 三角形の中心Y座標
+     * @param {number} size - 三角形のサイズ
+     * @param {number} rotation - 回転角度（ラジアン）
+     * @param {number} px - チェックする点のX座標
+     * @param {number} py - チェックする点のY座標
+     * @returns {boolean} 点が内部にある場合はtrue
+     */
     containsPoint(centerX, centerY, size, rotation, px, py) {
         const vertices = [];
         for (let i = 0; i < 3; i++) {
@@ -95,7 +119,16 @@ const ReuleauxGeometry = {
         return true;
     },
 
-    // ルーローの三角形の境界上の最近接点を取得
+    /**
+     * ルーローの三角形の境界上の最近接点を取得
+     * @param {number} centerX - 三角形の中心X座標
+     * @param {number} centerY - 三角形の中心Y座標
+     * @param {number} size - 三角形のサイズ
+     * @param {number} rotation - 回転角度（ラジアン）
+     * @param {number} px - 対象点のX座標
+     * @param {number} py - 対象点のY座標
+     * @returns {{point: {x: number, y: number, arcIndex: number}, distance: number}} 最近接点と距離
+     */
     closestPointOnBoundary(centerX, centerY, size, rotation, px, py) {
         const vertices = [];
         for (let i = 0; i < 3; i++) {
@@ -163,13 +196,27 @@ const ReuleauxGeometry = {
         return { point: closestPoint, distance: minDist };
     },
 
-    // 定幅（ルーローの三角形の幅）
+    /**
+     * 定幅（ルーローの三角形の幅）を計算
+     * @param {number} size - 三角形のサイズ
+     * @returns {number} 三角形の幅
+     */
     getWidth(size) {
         return size * Math.sqrt(3);
     }
 };
 
+/**
+ * ルーローの三角形を表すクラス
+ * @class
+ */
 class ReuleauxTriangle {
+    /**
+     * ルーローの三角形のインスタンスを作成
+     * @param {number} x - 初期X座標
+     * @param {number} y - 初期Y座標
+     * @param {number} [size] - サイズ（省略時はランダム）
+     */
     constructor(x, y, size) {
         this.x = x;
         this.y = y;
@@ -196,6 +243,10 @@ class ReuleauxTriangle {
         this.invInertia = 1 / this.inertia;
     }
 
+    /**
+     * ランダムな色を生成
+     * @returns {string} RGBA形式の色文字列
+     */
     generateColor() {
         const colors = [
             'rgba(112, 0, 255, 1)',
@@ -208,23 +259,47 @@ class ReuleauxTriangle {
         return colors[Math.floor(Math.random() * colors.length)];
     }
 
+    /**
+     * 三角形の幅を取得
+     * @returns {number} 三角形の幅
+     */
     getWidth() {
         return ReuleauxGeometry.getWidth(this.size);
     }
 
+    /**
+     * 境界点の配列を取得
+     * @param {number} [segments=36] - 境界を構成する点の数
+     * @returns {{x: number, y: number}[]} 境界点の配列
+     */
     getPoints(segments = 36) {
         return ReuleauxGeometry.getPoints(this.x, this.y, this.size, this.rotation, segments);
     }
 
+    /**
+     * 点がこの三角形の内部にあるかチェック
+     * @param {number} px - チェックする点のX座標
+     * @param {number} py - チェックする点のY座標
+     * @returns {boolean} 点が内部にある場合はtrue
+     */
     containsPoint(px, py) {
         return ReuleauxGeometry.containsPoint(this.x, this.y, this.size, this.rotation, px, py);
     }
 
+    /**
+     * 境界上の最近接点を取得
+     * @param {number} px - 対象点のX座標
+     * @param {number} py - 対象点のY座標
+     * @returns {{point: {x: number, y: number, arcIndex: number}, distance: number}} 最近接点と距離
+     */
     closestPointOnBoundary(px, py) {
         return ReuleauxGeometry.closestPointOnBoundary(this.x, this.y, this.size, this.rotation, px, py);
     }
 
-    // 壁との衝突で最も深い貫通点を見つける
+    /**
+     * 壁との衝突で最も深い貫通点を見つける
+     * @returns {{point: {x: number, y: number}, normal: {x: number, y: number}, depth: number, type: string}|null} 貫通情報またはnull
+     */
     findDeepestWallPenetration() {
         const points = this.getPoints(24);
         let deepest = null;
@@ -270,6 +345,11 @@ class ReuleauxTriangle {
         return deepest;
     }
 
+    /**
+     * 三角形の状態を更新（物理演算）
+     * @param {number} dt - デルタタイム（フレーム間の時間差）
+     * @returns {boolean} 三角形がまだ有効な場合はtrue（消滅完了時はfalse）
+     */
     update(dt) {
         // 消滅アニメーション中
         if (this.isDisappearing) {
@@ -397,6 +477,11 @@ class ReuleauxTriangle {
         return true;
     }
 
+    /**
+     * 三角形をキャンバスに描画
+     * @param {CanvasRenderingContext2D} ctx - 描画コンテキスト
+     * @returns {void}
+     */
     draw(ctx) {
         // NaN防止チェック
         if (isNaN(this.x) || isNaN(this.y) || isNaN(this.size) || isNaN(this.rotation)) {
@@ -484,7 +569,12 @@ class ReuleauxTriangle {
     }
 }
 
-// 2つのルーローの三角形の衝突検出
+/**
+ * 2つのルーローの三角形の衝突を検出
+ * @param {ReuleauxTriangle} a - 1つ目の三角形
+ * @param {ReuleauxTriangle} b - 2つ目の三角形
+ * @returns {{normal: {x: number, y: number}, depth: number, point: {x: number, y: number}}|null} 衝突情報またはnull
+ */
 function checkReuleauxCollision(a, b) {
     // 消滅中のオブジェクトは衝突判定しない
     if (a.isDisappearing || b.isDisappearing) return null;
@@ -554,6 +644,13 @@ function checkReuleauxCollision(a, b) {
     return { normal, depth, point: contactPoint };
 }
 
+/**
+ * 衝突を解決し、速度と位置を更新
+ * @param {ReuleauxTriangle} a - 1つ目の三角形
+ * @param {ReuleauxTriangle} b - 2つ目の三角形
+ * @param {{normal: {x: number, y: number}, depth: number, point: {x: number, y: number}}} collision - 衝突情報
+ * @returns {void}
+ */
 function resolveCollision(a, b, collision) {
     if (!collision || !collision.point || !collision.normal) return;
 
@@ -652,6 +749,10 @@ function resolveCollision(a, b, collision) {
     }
 }
 
+/**
+ * 全ての三角形間の衝突をチェックし解決
+ * @returns {void}
+ */
 function checkCollisions() {
     // 位置補正のためのイテレーション
     for (let iter = 0; iter < 4; iter++) {
@@ -669,6 +770,12 @@ function checkCollisions() {
     }
 }
 
+/**
+ * 新しい三角形を追加
+ * @param {number} [x] - X座標（省略時はランダム）
+ * @param {number} [y] - Y座標（省略時はランダム）
+ * @returns {void}
+ */
 function addTriangle(x, y) {
     const triangle = new ReuleauxTriangle(
         x || Math.random() * (width - 200) + 100,
@@ -678,10 +785,19 @@ function addTriangle(x, y) {
     updateObjectCount();
 }
 
+/**
+ * オブジェクト数の表示を更新
+ * @returns {void}
+ */
 function updateObjectCount() {
     document.getElementById('objectCount').textContent = reuleauxTriangles.length;
 }
 
+/**
+ * アニメーションループ
+ * @param {DOMHighResTimeStamp} currentTime - 現在のタイムスタンプ
+ * @returns {void}
+ */
 function animate(currentTime) {
     const dt = Math.min((currentTime - lastTime) / 16.67, 3);
     lastTime = currentTime;
@@ -719,29 +835,44 @@ for (let i = 0; i < 5; i++) {
     setTimeout(() => addTriangle(), i * 200);
 }
 
-// イベントリスナー
-// ダブルクリックで三角形を追加（マウスのみ）
+/**
+ * ダブルクリックイベント - 三角形を追加（マウスのみ）
+ * タッチデバイスの場合はダブルタップで処理するためスキップ
+ * @param {MouseEvent} e - マウスイベント
+ */
 canvas.addEventListener('dblclick', (e) => {
-    // タッチデバイスの場合はスキップ（ダブルタップで処理するため）
     if (isTouchDevice) return;
     const rect = canvas.getBoundingClientRect();
     addTriangle(e.clientX - rect.left, e.clientY - rect.top);
 });
 
-// タッチデバイス判定フラグ
+/** @type {boolean} タッチデバイス判定フラグ */
 let isTouchDevice = false;
 
-// タッチデバイス用のダブルタップ検出
+/** @type {number} 最後のタップ時刻 */
 let lastTapTime = 0;
+/** @type {number} 最後のタップX座標 */
 let lastTapX = 0;
+/** @type {number} 最後のタップY座標 */
 let lastTapY = 0;
-const doubleTapDelay = 300; // ダブルタップの間隔（ミリ秒）
-const doubleTapDistance = 30; // 同じ場所とみなす距離（ピクセル）
+/** @type {number} ダブルタップの間隔（ミリ秒） */
+const doubleTapDelay = 300;
+/** @type {number} 同じ場所とみなす距離（ピクセル） */
+const doubleTapDistance = 30;
 
+/**
+ * タッチ開始イベント - タッチデバイス判定用
+ * タッチが検出されたらisTouchDeviceをtrueに設定
+ */
 canvas.addEventListener('touchstart', () => {
     isTouchDevice = true;
 }, { passive: true });
 
+/**
+ * タッチ終了イベント - ダブルタップで三角形を追加
+ * 選択中の三角形がある場合は選択解除のみ行う
+ * @param {TouchEvent} e - タッチイベント
+ */
 canvas.addEventListener('touchend', (e) => {
     if (selectedTriangle) {
         selectedTriangle = null;
@@ -760,10 +891,9 @@ canvas.addEventListener('touchend', (e) => {
     );
 
     if (timeDiff < doubleTapDelay && distDiff < doubleTapDistance) {
-        // ダブルタップ検出
         e.preventDefault();
         addTriangle(tapX, tapY);
-        lastTapTime = 0; // リセット
+        lastTapTime = 0;
     } else {
         lastTapTime = currentTime;
         lastTapX = tapX;
@@ -771,6 +901,11 @@ canvas.addEventListener('touchend', (e) => {
     }
 });
 
+/**
+ * マウスダウンイベント - 三角形のドラッグ開始
+ * クリック位置に三角形があれば選択してドラッグ可能にする
+ * @param {MouseEvent} e - マウスイベント
+ */
 canvas.addEventListener('mousedown', (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
@@ -783,13 +918,17 @@ canvas.addEventListener('mousedown', (e) => {
             dragOffset.y = my - selectedTriangle.y;
             selectedTriangle.vx = 0;
             selectedTriangle.vy = 0;
-            // ドラッグ開始時に軌跡をクリア
             selectedTriangle.trail = [];
             break;
         }
     }
 });
 
+/**
+ * マウス移動イベント - ドラッグ中の三角形移動とカーソル変更
+ * 選択中の三角形があれば位置を更新、なければホバー状態でカーソル変更
+ * @param {MouseEvent} e - マウスイベント
+ */
 canvas.addEventListener('mousemove', (e) => {
     const rect = canvas.getBoundingClientRect();
     const mx = e.clientX - rect.left;
@@ -813,15 +952,27 @@ canvas.addEventListener('mousemove', (e) => {
     }
 });
 
+/**
+ * マウスアップイベント - ドラッグ終了
+ * 選択中の三角形を解除する
+ */
 canvas.addEventListener('mouseup', () => {
     selectedTriangle = null;
 });
 
+/**
+ * マウスリーブイベント - キャンバス外に出た時のドラッグ終了
+ * 選択中の三角形を解除する
+ */
 canvas.addEventListener('mouseleave', () => {
     selectedTriangle = null;
 });
 
-// タッチイベント（ドラッグ用）
+/**
+ * タッチ開始イベント - 三角形のドラッグ開始（タッチ用）
+ * タッチ位置に三角形があれば選択してドラッグ可能にする
+ * @param {TouchEvent} e - タッチイベント
+ */
 canvas.addEventListener('touchstart', (e) => {
     const touch = e.touches[0];
     const rect = canvas.getBoundingClientRect();
@@ -843,6 +994,11 @@ canvas.addEventListener('touchstart', (e) => {
     }
 }, { passive: false });
 
+/**
+ * タッチ移動イベント - ドラッグ中の三角形移動（タッチ用）
+ * 選択中の三角形があればタッチ位置に追従させる
+ * @param {TouchEvent} e - タッチイベント
+ */
 canvas.addEventListener('touchmove', (e) => {
     if (selectedTriangle) {
         const touch = e.touches[0];
@@ -860,6 +1016,11 @@ canvas.addEventListener('touchmove', (e) => {
     }
 }, { passive: false });
 
+/**
+ * クリアボタンクリックイベント - 全ての三角形を消滅
+ * 各三角形に消滅アニメーションを開始させる
+ * @param {MouseEvent} e - マウスイベント
+ */
 document.getElementById('clearBtn').addEventListener('click', (e) => {
     e.stopPropagation();
     // 各三角形に消滅アニメーションを開始
@@ -869,6 +1030,11 @@ document.getElementById('clearBtn').addEventListener('click', (e) => {
     });
 });
 
+/**
+ * 重力ボタンクリックイベント - 重力のON/OFF切り替え
+ * 重力の状態を切り替え、ボタンのテキストとスタイルを更新
+ * @param {MouseEvent} e - マウスイベント
+ */
 document.getElementById('gravityBtn').addEventListener('click', (e) => {
     e.stopPropagation();
     gravity = gravity === 0 ? 1 : 0;
@@ -876,8 +1042,14 @@ document.getElementById('gravityBtn').addEventListener('click', (e) => {
     e.target.classList.toggle('active', gravity === 1);
 });
 
+/**
+ * デバッグモードチェックボックス変更イベント - デバッグ表示の切り替え
+ * チェック状態に応じてデバッグモードを有効/無効にする
+ * @param {Event} e - 変更イベント
+ */
 document.getElementById('debugMode').addEventListener('change', (e) => {
     debugMode = e.target.checked;
 });
 
+// アニメーション開始
 animate(performance.now());
